@@ -6,7 +6,7 @@ import akka.stream.actor.{ActorPublisher, ActorPublisherMessage}
 import akka.util.ByteString
 import org.reactivestreams.Publisher
 import scripting.Utils
-import akka.actor.{ActorRef, Props, ActorLogging, ActorSystem}
+import akka.actor._
 import akka.stream._
 import akka.stream.scaladsl.Source
 import scala.concurrent.duration._
@@ -77,6 +77,10 @@ object CmdRunner extends App with Utils {
 
   var dataPublisherRef : ActorRef = ActorRef.noSender
 
+  val connection = system.actorOf( Props(new WebSocketConnection(materializer)), "WebSocketConnection")
+
+
+  connection ! Connect
 
   import scala.sys.process.ProcessIO
   val pio = new ProcessIO(_ => (), { stdout =>
@@ -84,10 +88,11 @@ object CmdRunner extends App with Utils {
     val dataPublisher = ActorPublisher[String](dataPublisherRef)
 
     s = Source.fromPublisher(dataPublisher)
-    s.runForeach(
-        (x: String) =>
-          println(s"Data from $x")
-      )
+    s.runForeach {
+      (x: String) =>
+        connection ! x
+        println(s"Data from $x")
+      }
       .onComplete(_ => print("complete"))
     dataPublisherRef ! Continue()
   },
