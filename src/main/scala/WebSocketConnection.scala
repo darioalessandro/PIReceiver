@@ -1,10 +1,11 @@
+import akka.actor.SupervisorStrategy.Stop
 import akka.http.scaladsl.model.HttpHeader.ParsingResult
 import akka.http.scaladsl.model.{HttpHeader, StatusCodes}
 import akka.stream.actor.ActorPublisher
 import akka.{NotUsed, Done}
 import akka.actor.{ActorLogging, Actor}
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.ws.{TextMessage, Message, WebSocketRequest}
+import akka.http.scaladsl.model.ws.{WebSocketUpgradeResponse, TextMessage, Message, WebSocketRequest}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl._
 import sun.plugin.dom.exception.InvalidStateException
@@ -18,22 +19,21 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 case object Connect
 case object OnDisconnect
-
+case object Timeout
+case object OnConnect
 
 class WebSocketConnection(materializer : ActorMaterializer) extends akka.stream.actor.ActorPublisher[Message]  with ActorLogging {
 
   def receive = {
     case s : String =>
       throw new InvalidStateException("")
-
   }
-
 
   override def preStart = {
     context.become(disconnected, discardOld = true)
   }
 
-  val helloSource: Source[Message, NotUsed] =
+  def helloSource: Source[Message, NotUsed] =
     Source.fromPublisher(ActorPublisher[Message](self))
 
   val printSink: Sink[Message, Future[Done]] =
@@ -42,9 +42,8 @@ class WebSocketConnection(materializer : ActorMaterializer) extends akka.stream.
         println(message.text)
     }
 
-  val flow: Flow[Message, Message, Future[Done]] =
+  def flow: Flow[Message, Message, Future[Done]] =
     Flow.fromSinkAndSourceMat(printSink, helloSource)(Keep.left)
-
 
   val userId = HttpHeader.parse("receiverId", "134") match {
     case ParsingResult.Ok(header, error) =>
@@ -59,55 +58,64 @@ class WebSocketConnection(materializer : ActorMaterializer) extends akka.stream.
   def disconnected : Receive = {
 
     case s : String =>
-      print(s"ignoring message $s")
+      println(s"ignoring message because I am disconnected")
 
     case Connect =>
       log.debug("connect request")
       implicit val system = context.system
       implicit val mat = materializer
       val (upgradeResponse, closed) =
-        Http().singleWebSocketRequest(WebSocketRequest("ws://localhost:9001/receiverSocket",
+        Http().singleWebSocketRequest(WebSocketRequest("ws://localhost:9000/receiverSocket",
           extraHeaders = scala.collection.immutable.Seq(userId, username)),
           flow)
 
       val connected = upgradeResponse.flatMap { upgrade =>
-        if (upgrade.response.status == StatusCodes.OK) {
-          log.debug("connected")
+        Future.successful(Done)
+      }
 
-          Future.successful(Done)
-        } else {
-          log.debug("error connecting")
-          //context.system.scheduler.scheduleOnce(2 seconds, self, Connect)
-          Future.successful(Done)
-        }
+      connected.onSuccess {
+        case s =>
+          log.debug("connected")
+          context.parent ! OnConnect
+          this.context.become(this.connected, discardOld = true)
+      }
+
+      upgradeResponse.onFailure {case f =>
+        log.debug("error connecting")
+        //context.system.scheduler.scheduleOnce(2 seconds, self, Connect)
+        Future.successful(Done)
       }
 
       connected.onFailure { case f =>
         log.debug("error connecting")
-        context.system.scheduler.scheduleOnce(2 seconds, self, Connect)
+        //context.system.scheduler.scheduleOnce(2 seconds, self, Connect)
         Future.successful(Done)
-      }
-
-      connected.onComplete { m =>
-        log.debug("onComplete " + m)
-        this.context.become(this.connected, discardOld = true)
       }
 
       closed.foreach{ u =>
         log.debug("on close")
-        this.context.become(this.disconnected, discardOld = true)
-        context.system.scheduler.scheduleOnce(2 seconds, self, Connect)
+        context.stop(self)
       }
+
+      closed.onFailure { case f =>
+        log.debug("error connecting")
+        context.stop(self)
+        //Future.successful(Done)
+      }
+
   }
 
   def connected : Receive = {
     case OnDisconnect =>
       log.debug("OnDisconnect")
-      context.become(disconnected, discardOld = true)
-      context.system.scheduler.scheduleOnce(2 seconds, self, Connect)
+      context.stop(self)
 
     case s : String =>
-      onNext(TextMessage(s))
+      if(totalDemand > 0) {
+        onNext(TextMessage(s))
+      } else {
+        log.debug("dropping message since total demand is 0")
+      }
   }
 
 
