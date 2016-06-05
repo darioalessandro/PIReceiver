@@ -55,7 +55,9 @@ class SocketSupervisor (materializer : ActorMaterializer) extends Actor  with Ac
 
     case s : String =>
       log.debug(s"got message $s")
-      websocket ! s
+      BeaconUpdateGenerator.parse(s).foreach { beaconUpdate =>
+        websocket ! beaconUpdate
+      }
 
     case t : Terminated =>
       log.debug("disconnected")

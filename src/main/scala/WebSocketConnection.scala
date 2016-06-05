@@ -17,6 +17,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
   * Created by darioalessandro on 4/6/16.
   */
 
+//UUID: B9407F30-F5F8-466E-AFF9-25556B57FE6D MAJOR: 16914 MINOR: 22626 POWER: -68
+
 case object Connect
 case object OnDisconnect
 case object Timeout
@@ -65,7 +67,7 @@ class WebSocketConnection(materializer : ActorMaterializer) extends akka.stream.
       implicit val system = context.system
       implicit val mat = materializer
       val (upgradeResponse, closed) =
-        Http().singleWebSocketRequest(WebSocketRequest("ws://localhost:9000/receiverSocket",
+        Http().singleWebSocketRequest(WebSocketRequest("ws://192.168.1.68:9000/receiverSocket",
           extraHeaders = scala.collection.immutable.Seq(userId, username)),
           flow)
 
@@ -110,9 +112,9 @@ class WebSocketConnection(materializer : ActorMaterializer) extends akka.stream.
       log.debug("OnDisconnect")
       context.stop(self)
 
-    case s : String =>
+    case s : BeaconUpdate =>
       if(totalDemand > 0) {
-        onNext(TextMessage(s))
+        onNext(TextMessage(s.toJson))
       } else {
         log.debug("dropping message since total demand is 0")
       }
