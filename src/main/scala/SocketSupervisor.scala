@@ -1,19 +1,20 @@
+import java.security.InvalidParameterException
+
 import akka.actor.SupervisorStrategy.Stop
 import akka.actor._
 import akka.http.scaladsl.model.ws.{TextMessage, Message}
 import akka.stream.ActorMaterializer
-import sun.plugin.dom.exception.InvalidStateException
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
 /**
   * Created by darioalessandro on 6/5/16.
   */
-class SocketSupervisor (materializer : ActorMaterializer) extends Actor  with ActorLogging {
+class SocketSupervisor (materializer : ActorMaterializer, request :WebSocketConnectionRequest) extends Actor  with ActorLogging {
 
   def receive = {
     case s : String =>
-      throw new InvalidStateException("")
+      throw new InvalidParameterException("")
   }
 
   override def preStart = {
@@ -30,7 +31,7 @@ class SocketSupervisor (materializer : ActorMaterializer) extends Actor  with Ac
       context.system.scheduler.scheduleOnce(2 seconds, self, Connect)
 
     case Connect =>
-      val websocket = context.actorOf( Props(new WebSocketConnection(materializer)), "WebSocketConnection")
+      val websocket = context.actorOf( Props(new WebSocketConnection(materializer, request)), "WebSocketConnection")
       context.watch(websocket)
       websocket ! Connect
       context.become(connecting(websocket), discardOld = true)

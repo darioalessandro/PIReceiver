@@ -1,3 +1,5 @@
+import java.security.InvalidParameterException
+
 import akka.actor.SupervisorStrategy.Stop
 import akka.http.scaladsl.model.HttpHeader.ParsingResult
 import akka.http.scaladsl.model.{HttpHeader, StatusCodes}
@@ -8,7 +10,6 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.ws.{WebSocketUpgradeResponse, TextMessage, Message, WebSocketRequest}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl._
-import sun.plugin.dom.exception.InvalidStateException
 import scala.concurrent.duration._
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -24,11 +25,13 @@ case object OnDisconnect
 case object Timeout
 case object OnConnect
 
-class WebSocketConnection(materializer : ActorMaterializer) extends akka.stream.actor.ActorPublisher[Message]  with ActorLogging {
+case class WebSocketConnectionRequest(url : String, receiverId : String, username : String)
+
+class WebSocketConnection(materializer : ActorMaterializer, request:WebSocketConnectionRequest) extends akka.stream.actor.ActorPublisher[Message]  with ActorLogging {
 
   def receive = {
     case s : String =>
-      throw new InvalidStateException("")
+      throw new InvalidParameterException()
   }
 
   override def preStart = {
@@ -47,12 +50,12 @@ class WebSocketConnection(materializer : ActorMaterializer) extends akka.stream.
   def flow: Flow[Message, Message, Future[Done]] =
     Flow.fromSinkAndSourceMat(printSink, helloSource)(Keep.left)
 
-  val userId = HttpHeader.parse("receiverId", "134") match {
+  val userId = HttpHeader.parse("receiverId", request.receiverId) match {
     case ParsingResult.Ok(header, error) =>
       header
   }
 
-  val username = HttpHeader.parse("username", "134") match {
+  val username = HttpHeader.parse("username", request.username) match {
     case ParsingResult.Ok(header, error) =>
       header
   }
@@ -67,7 +70,7 @@ class WebSocketConnection(materializer : ActorMaterializer) extends akka.stream.
       implicit val system = context.system
       implicit val mat = materializer
       val (upgradeResponse, closed) =
-        Http().singleWebSocketRequest(WebSocketRequest("ws://192.168.1.68:9000/receiverSocket",
+        Http().singleWebSocketRequest(WebSocketRequest(request.url,
           extraHeaders = scala.collection.immutable.Seq(userId, username)),
           flow)
 

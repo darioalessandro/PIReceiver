@@ -7,7 +7,7 @@ import akka.stream.actor.ActorPublisherMessage
   * Created by darioalessandro on 6/5/16.
   */
 
-class InputStreamPublisher(is: InputStream, chunkSize: Int = 10)
+class InputStreamPublisher(is: InputStream, chunkSize: Int = 100)
   extends akka.stream.actor.ActorPublisher[String]
     with ActorLogging {
 
@@ -26,21 +26,27 @@ class InputStreamPublisher(is: InputStream, chunkSize: Int = 10)
     }
 
   def readAndEmit(): Unit = if (totalDemand > 0) try {
-    // blocking read
-    val buffer = new BufferedReader(new InputStreamReader(is)).readLine()
+    val streamReader = new BufferedReader(new InputStreamReader(is))
 
-    buffer.length match {
-      case -1 ⇒
-        // had nothing to read into this chunk
-        log.debug("No more bytes available to read (got `-1` from `read`)")
-        onCompleteThenStop()
+    def readOne(buffer:String) {
+      val chunk: String = streamReader.readLine()
+      log.debug(s"chunk $chunk")
+      if(chunk == null) onNext(buffer)
 
-      case _ ⇒
-        readBytesTotal += buffer.length
+      chunk.head match {
 
-        // emit immediately, as this is the only chance to do it before we might block again
-        onNext(buffer)
+        case '>' ⇒
+          // had nothing to read into this chunk
+          log.debug("new message, flush previous")
+          if(buffer.length > 0) onNext(buffer) else readOne(buffer + chunk)
+
+
+        case _ ⇒
+          readOne(buffer + chunk)
+      }
     }
+    readOne("")
+
   } catch {
     case ex: Exception ⇒
       onErrorThenStop(ex)

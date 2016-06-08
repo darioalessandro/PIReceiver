@@ -1,9 +1,11 @@
 import java.io.{InputStreamReader, BufferedReader, InputStream}
+import java.net.NetworkInterface
 import java.util
 
 import akka.NotUsed
 import akka.stream.actor.{ActorPublisher, ActorPublisherMessage}
 import akka.util.ByteString
+import com.typesafe.config.ConfigFactory
 import org.reactivestreams.Publisher
 import scripting.Utils
 import akka.actor._
@@ -18,6 +20,8 @@ case class Continue()
 
 object CmdRunner extends App with Utils {
 
+  val conf = ConfigFactory.load()
+
   implicit val system = ActorSystem("BeaconListener")
   implicit val materializer = ActorMaterializer()
   import scala.sys.process._
@@ -26,7 +30,12 @@ object CmdRunner extends App with Utils {
 
   var dataPublisherRef : ActorRef = ActorRef.noSender
 
-  val connection = system.actorOf( Props(new SocketSupervisor(materializer)), "WebSocketConnection")
+
+
+  val connectionRequest = WebSocketConnectionRequest(url= conf.getString("backend.url"),
+    receiverId=conf.getString("backend.receiverId") ,
+    username =conf.getString("backend.username"))
+  val connection = system.actorOf( Props(new SocketSupervisor(materializer, connectionRequest)), "WebSocketConnection")
 
   connection ! Connect
 
@@ -47,5 +56,8 @@ object CmdRunner extends App with Utils {
   },
     error => scala.io.Source.fromInputStream(error)
       .getLines.foreach(println))
-  args(0).run(pio)
+
+  var cmd = args(0)
+  println(s"executing $cmd")
+  cmd.run(pio)
 }

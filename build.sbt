@@ -1,6 +1,6 @@
 name := "Receiver"
 
-version := "1.0"
+version := "1.2"
 
 scalaVersion := "2.11.8"
 
@@ -16,3 +16,4 @@ libraryDependencies ++= Seq(
 //enablePlugins(SbtNativePackager)
 
 enablePlugins(JavaAppPackaging)
+
