@@ -27,7 +27,7 @@ object BeaconUpdateGenerator {
       val uuid = bytes.slice(24,24+4).mkString+'-'+bytes.slice(24+4,24+4+2).mkString+"-"+bytes.slice(24+4+2,24+4+2+2).mkString+"-"+bytes.slice(24+4+2+2,24+4+2+2+2).mkString+"-"+bytes.slice(24+4+2+2+2,24+4+2+2+2+6).mkString
       val major = Integer.parseInt(bytes.slice(24+16, 24+18).mkString,16).toString
       val minor = Integer.parseInt(bytes.slice(24+18, 24+20).mkString,16).toString
-      val rssi =  (-256 + Integer.parseInt(bytes.slice(24+20,24+21).mkString,16)).toString
+      val rssi =  ( Integer.parseInt(bytes.slice(24+21,24+22).mkString,16) -256 ).toString
       Some(BeaconUpdate(uuid = uuid,
                    major = major,
                    minor = minor,
